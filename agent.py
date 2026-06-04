@@ -2,16 +2,19 @@ import os
 import json
 import feedparser
 import datetime
-import google.generativeai as genai
+import urllib.parse # Added for URL Encoding
+from google import genai # Updated Google SDK
 
-# 1. Configure the LLM
-# The API key will be injected securely via GitHub Secrets
-genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-model = genai.GenerativeModel('gemini-2.5-flash')
+# 1. Configure the LLM using the new SDK syntax
+client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
-def fetch_latest_papers(query="all:\"Wan 2.2\" OR all:\"video generation\"", max_results=3):
+def fetch_latest_papers(query='all:"Wan 2.2" OR all:"video generation"', max_results=3):
     """Fetches the latest research papers from ArXiv based on specific AI architectures."""
-    url = f'http://export.arxiv.org/api/query?search_query={query}&sortBy=submittedDate&sortOrder=descending&max_results={max_results}'
+    
+    # URL Encode the query to safely handle spaces and quotes
+    safe_query = urllib.parse.quote(query)
+    url = f'http://export.arxiv.org/api/query?search_query={safe_query}&sortBy=submittedDate&sortOrder=descending&max_results={max_results}'
+    
     feed = feedparser.parse(url)
     return feed.entries
 
@@ -26,7 +29,12 @@ def analyze_paper(title, summary):
     Title: {title}
     Abstract: {summary}
     """
-    response = model.generate_content(prompt)
+    
+    # Updated text generation syntax for the new google-genai library
+    response = client.models.generate_content(
+        model='gemini-2.5-flash',
+        contents=prompt,
+    )
     return response.text
 
 def main():
