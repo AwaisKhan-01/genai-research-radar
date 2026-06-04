@@ -19,16 +19,23 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11' # Updated Python version
+          python-version: '3.11'
 
+      # 1. Create a pristine virtual environment and install dependencies inside it
       - name: Install Dependencies
         run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      # 2. Activate the virtual environment before running the agent
       - name: Run the AI Agent
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: python agent.py
+        run: |
+          source .venv/bin/activate
+          python agent.py
 
       - name: Commit and Push Changes
         run: |
