@@ -1,36 +1,38 @@
 import os
-import json
-import feedparser
 import datetime
-import urllib.parse # Added for URL Encoding
-from google import genai # Updated Google SDK
+import urllib.parse
+import feedparser
+from google import genai
 
-# 1. Configure the LLM using the new SDK syntax
+# Configure the LLM
 client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
-def fetch_latest_papers(query='all:"Wan 2.2" OR all:"video generation"', max_results=3):
-    """Fetches the latest research papers from ArXiv based on specific AI architectures."""
+# UPDATED: Broader query guaranteed to hit recent GenAI research
+def fetch_latest_papers(query='all:"video generation" AND all:"diffusion"', max_results=3):
+    """Fetches the latest research papers from ArXiv."""
     
-    # URL Encode the query to safely handle spaces and quotes
     safe_query = urllib.parse.quote(query)
     url = f'http://export.arxiv.org/api/query?search_query={safe_query}&sortBy=submittedDate&sortOrder=descending&max_results={max_results}'
     
+    print(f"Querying ArXiv API: {url}")
     feed = feedparser.parse(url)
     return feed.entries
 
 def analyze_paper(title, summary):
-    """Passes the paper details to the LLM for analysis."""
+    """Passes the paper details to the LLM for a deep, meaningful analysis."""
     prompt = f"""
-    Act as a Senior AI Researcher. Analyze the following paper abstract and provide:
-    1. A one-sentence ELI5 summary.
-    2. The core technical innovation (e.g., specific architectural changes to the U-Net or DiT).
-    3. Potential real-world application.
+    Act as a Principal AI Engineer. We are building a daily research digest for a team building production Generative AI pipelines.
+    Analyze the following academic paper abstract and extract the tangible engineering value.
+    
+    Format your response strictly as follows (use markdown bolding):
+    **The TL;DR:** (One clear sentence explaining the core concept).
+    **Architectural Innovation:** (What exactly did they change? e.g., modifications to DiT, U-Net, latent spaces, or attention mechanisms).
+    **Engineering Takeaway:** (How could this be applied to real-world GenAI products or improve inference speed/quality?)
     
     Title: {title}
     Abstract: {summary}
     """
     
-    # Updated text generation syntax for the new google-genai library
     response = client.models.generate_content(
         model='gemini-2.5-flash',
         contents=prompt,
@@ -41,14 +43,21 @@ def main():
     print("Agent waking up. Fetching papers...")
     papers = fetch_latest_papers()
     
+    # NEW: Failsafe to check if we actually got data
+    print(f"Found {len(papers)} papers matching the query.")
+    if len(papers) == 0:
+        print("No papers found today. Exiting without creating a blank report.")
+        return
+    
     daily_report = f"# AI Research Digest - {datetime.date.today()}\n\n"
+    daily_report += "> *Automated daily analysis of the latest text-to-video and diffusion model research.*\n\n"
     
     for paper in papers:
         print(f"Analyzing: {paper.title}")
         analysis = analyze_paper(paper.title, paper.summary)
         
-        daily_report += f"## {paper.title}\n"
-        daily_report += f"**Link:** {paper.link}\n\n"
+        daily_report += f"### {paper.title}\n"
+        daily_report += f"[Read Full Paper on ArXiv]({paper.link})\n\n"
         daily_report += f"{analysis}\n\n"
         daily_report += "---\n"
         
@@ -59,7 +68,7 @@ def main():
     with open(file_path, "w") as f:
         f.write(daily_report)
         
-    print(f"Report saved to {file_path}")
+    print(f"Successfully generated and saved research digest to {file_path}")
 
 if __name__ == "__main__":
     main()
