@@ -1,0 +1,46 @@
+name: Daily AI Research Agent
+
+# 1. The Trigger
+# This tells GitHub to run the script at 08:00 UTC every day.
+on:
+  schedule:
+    - cron: '0 8 * * *'
+  workflow_dispatch: # Allows you to trigger it manually for testing
+
+# 2. The Execution Environment
+jobs:
+  run-agent:
+    runs-on: ubuntu-latest
+    
+    # We need specific permissions to push commits back to the repo
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run the AI Agent
+        # We inject the secret API key into the environment securely
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python agent.py
+
+      # 3. The Commit Logic
+      # This configures the git user, adds the new markdown file, and pushes it.
+      - name: Commit and Push Changes
+        run: |
+          git config --local user.email "actions@github.com"
+          git config --local user.name "GitHub Actions Agent"
+          git add reports/
+          # Only commit if there are actual changes
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Automated AI Research Digest" && git push)
