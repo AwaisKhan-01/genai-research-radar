@@ -25,7 +25,7 @@ This agent is built with a **Highly Available (HA) Data Pipeline** architecture 
    [ Paper Metadata List ]
              │
              ▼
-    [ Gemini 2.0 Flash ] ───► (Exponential Backoff Retry for 429/503 errors)
+    [ Gemini 2.5 Flash ] ───► (Exponential Backoff Retry for 429/503 errors)
              │
              ▼
   [ Markdown Report Gen ] ───► Written to `/reports/digest_YYYY-MM-DD.md`
@@ -38,7 +38,7 @@ This agent is built with a **Highly Available (HA) Data Pipeline** architecture 
 * **Dual-Source Ingestion:** Uses ArXiv's query system as a primary source, seamlessly falling back to Hugging Face's Trending Daily Papers API if ArXiv encounters a `503 Service Unavailable` or unexpected schema errors.
 * **Smart Anti-Throttling:** Implements custom `User-Agent` string headers on HTTP requests to bypass strict automated bot/scraping filters on web entry points.
 * **Fault-Tolerant LLM Execution:** Configured with an **Exponential Backoff Retry Strategy** to smoothly absorb temporary API rate limits (`429 Resource Exhausted`) or downstream server strain.
-* **High-Quota Operational Balance:** Leverages the `gemini-2.0-flash` model structure to accommodate high-volume daily evaluations under standard free-tier execution windows (up to 1,500 requests/day).
+* **High-Quota Operational Balance:** Leverages the `gemini-2.5-flash` model structure to accommodate high-volume daily evaluations under standard free-tier execution windows (up to 1,500 requests/day).
 
 ---
 
