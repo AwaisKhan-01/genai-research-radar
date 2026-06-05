@@ -1,4 +1,5 @@
 import os
+import time
 import datetime
 import urllib.parse
 import feedparser
@@ -7,7 +8,6 @@ from google import genai
 # Configure the LLM
 client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
-# UPDATED: Broader query guaranteed to hit recent GenAI research
 def fetch_latest_papers(query='all:"video generation" AND all:"diffusion"', max_results=3):
     """Fetches the latest research papers from ArXiv."""
     
@@ -18,8 +18,8 @@ def fetch_latest_papers(query='all:"video generation" AND all:"diffusion"', max_
     feed = feedparser.parse(url)
     return feed.entries
 
-def analyze_paper(title, summary):
-    """Passes the paper details to the LLM for a deep, meaningful analysis."""
+def analyze_paper(title, summary, max_retries=3):
+    """Passes the paper details to the LLM with retry logic for 503 errors."""
     prompt = f"""
     Act as a Principal AI Engineer. We are building a daily research digest for a team building production Generative AI pipelines.
     Analyze the following academic paper abstract and extract the tangible engineering value.
@@ -33,17 +33,29 @@ def analyze_paper(title, summary):
     Abstract: {summary}
     """
     
-    response = client.models.generate_content(
-        model='gemini-2.5-flash',
-        contents=prompt,
-    )
-    return response.text
+    # ---------------------------------------------------------
+    # NEW: Exponential Backoff Retry Logic
+    # ---------------------------------------------------------
+    for attempt in range(max_retries):
+        try:
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt,
+            )
+            return response.text
+        except Exception as e:
+            print(f"  [!] API Call Failed (Attempt {attempt + 1}/{max_retries}): {e}")
+            if attempt < max_retries - 1:
+                sleep_time = 15 * (attempt + 1) # Waits 15s, then 30s
+                print(f"  [*] Waiting {sleep_time} seconds before retrying...")
+                time.sleep(sleep_time)
+            else:
+                return "> *Analysis failed due to sustained API high demand. Try reading the abstract directly on ArXiv.*"
 
 def main():
     print("Agent waking up. Fetching papers...")
     papers = fetch_latest_papers()
     
-    # NEW: Failsafe to check if we actually got data
     print(f"Found {len(papers)} papers matching the query.")
     if len(papers) == 0:
         print("No papers found today. Exiting without creating a blank report.")
