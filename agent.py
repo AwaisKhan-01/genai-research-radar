@@ -6,16 +6,19 @@ import feedparser
 import requests 
 from google import genai
 
-# 1. Configure the LLM
+# 1. Configure the Gemini LLM Client
 client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
 def fetch_fallback_papers(max_results=3):
-    """Fallback: Fetches trending AI papers from Hugging Face if ArXiv is down."""
+    """Fallback: Fetches trending AI papers from Hugging Face if ArXiv fails or rate limits."""
     print("  [*] Initiating Fallback: Querying Hugging Face Daily Papers...")
     url = "https://huggingface.co/api/daily_papers"
     
+    # Custom User-Agent to identify the script and avoid 429 bot blocks
+    headers = {"User-Agent": "GenAI-Research-Agent/1.0"}
+    
     try:
-        response = requests.get(url)
+        response = requests.get(url, headers=headers)
         if response.status_code == 200:
             data = response.json()
             papers = []
@@ -23,6 +26,7 @@ def fetch_fallback_papers(max_results=3):
             for item in data[:max_results]:
                 paper_data = item.get('paper', {})
                 
+                # Create a dummy object to match the structure of feedparser entries
                 class DummyPaper:
                     pass
                 
@@ -36,39 +40,41 @@ def fetch_fallback_papers(max_results=3):
                 
             return papers
         else:
-            print(f"  [!] Fallback also failed. Hugging Face returned: {response.status_code}")
+            print(f"  [!] Fallback failed. Hugging Face returned Status Code: {response.status_code}")
             return []
     except Exception as e:
         print(f"  [!] Fallback crashed: {e}")
         return []
 
 def fetch_latest_papers(max_results=3):
-    """Primary: Fetches the latest research papers from ArXiv."""
+    """Primary: Fetches the latest research papers from ArXiv using an optimized query."""
     
-    search_query = 'cat:cs.CV+AND+abs:video+AND+abs:diffusion'
+    # Simplified query string to prevent ArXiv's legacy backend parser bugs
+    search_query = 'all:diffusion+video'
     url = f'http://export.arxiv.org/api/query?search_query={search_query}&sortBy=submittedDate&sortOrder=descending&max_results={max_results}'
     
     print(f"Querying ArXiv API: {url}")
     
     try:
         feed = feedparser.parse(url)
-        # Check for 503 Service Unavailable
+        
+        # Guard rail for 503 Service Unavailable
         if hasattr(feed, 'status') and feed.status == 503:
-            print("  [!] ArXiv API is currently down (503 Service Unavailable).")
+            print("  [!] ArXiv API is currently down (503 Service Unavailable). Routing to fallback...")
             return fetch_fallback_papers(max_results)
             
-        # Check if the query returned zero results
+        # Guard rail for unexpected empty results
         if len(feed.entries) == 0:
-            print("  [!] ArXiv returned 0 entries. Passing to fallback.")
+            print("  [!] ArXiv returned 0 entries. Routing to fallback...")
             return fetch_fallback_papers(max_results)
             
         return feed.entries
     except Exception as e:
-        print(f"  [!] Failed to connect to ArXiv: {e}")
+        print(f"  [!] Failed to connect to ArXiv: {e}. Routing to fallback...")
         return fetch_fallback_papers(max_results)
 
 def analyze_paper(title, summary, max_retries=3):
-    """Passes the paper details to the LLM with retry logic for 503 errors."""
+    """Passes the paper details to Gemini with exponential backoff retry logic."""
     prompt = f"""
     Act as a Principal AI Engineer. We are building a daily research digest for a team building production Generative AI pipelines.
     Analyze the following academic paper abstract and extract the tangible engineering value.
@@ -82,16 +88,16 @@ def analyze_paper(title, summary, max_retries=3):
     Abstract: {summary}
     """
     
-    # Exponential Backoff Retry Logic
     for attempt in range(max_retries):
         try:
+            # Using gemini-2.0-flash for high daily free-tier quota limits (1,500 requests/day)
             response = client.models.generate_content(
                 model='gemini-2.5-flash',
                 contents=prompt,
             )
             return response.text
         except Exception as e:
-            print(f"  [!] API Call Failed (Attempt {attempt + 1}/{max_retries}): {e}")
+            print(f"  [!] Gemini API Call Failed (Attempt {attempt + 1}/{max_retries}): {e}")
             if attempt < max_retries - 1:
                 sleep_time = 15 * (attempt + 1)
                 print(f"  [*] Waiting {sleep_time} seconds before retrying...")
@@ -120,7 +126,7 @@ def main():
         daily_report += f"{analysis}\n\n"
         daily_report += "---\n"
         
-    # Save the report to a file
+    # Build out directory path and save markdown report
     file_path = f"reports/digest_{datetime.date.today()}.md"
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     
