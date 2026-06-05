@@ -21,7 +21,6 @@ jobs:
         with:
           python-version: '3.11'
 
-      # 1. Create a pristine virtual environment and install dependencies inside it
       - name: Install Dependencies
         run: |
           python -m venv .venv
@@ -29,7 +28,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # 2. Activate the virtual environment before running the agent
       - name: Run the AI Agent
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

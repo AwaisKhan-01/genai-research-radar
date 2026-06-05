@@ -3,22 +3,69 @@ import time
 import datetime
 import urllib.parse
 import feedparser
+import requests 
 from google import genai
 
-# Configure the LLM
+# 1. Configure the LLM
 client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
-def fetch_latest_papers(max_results=3):
-    """Fetches the latest research papers from ArXiv."""
+def fetch_fallback_papers(max_results=3):
+    """Fallback: Fetches trending AI papers from Hugging Face if ArXiv is down."""
+    print("  [*] Initiating Fallback: Querying Hugging Face Daily Papers...")
+    url = "https://huggingface.co/api/daily_papers"
     
-    # ArXiv's legacy API requires strict formatting: '+' for spaces, '%22' for quotes.
-    # We manually construct the exact string to prevent boolean logic from breaking.
-    search_query = 'all:%22video+generation%22+AND+all:diffusion'
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            data = response.json()
+            papers = []
+            
+            for item in data[:max_results]:
+                paper_data = item.get('paper', {})
+                
+                class DummyPaper:
+                    pass
+                
+                p = DummyPaper()
+                p.title = paper_data.get('title', 'Unknown Title')
+                p.summary = paper_data.get('summary', 'No summary provided.')
+                arxiv_id = paper_data.get('id', '')
+                p.link = f"https://arxiv.org/abs/{arxiv_id}" if arxiv_id else "No link"
+                
+                papers.append(p)
+                
+            return papers
+        else:
+            print(f"  [!] Fallback also failed. Hugging Face returned: {response.status_code}")
+            return []
+    except Exception as e:
+        print(f"  [!] Fallback crashed: {e}")
+        return []
+
+def fetch_latest_papers(max_results=3):
+    """Primary: Fetches the latest research papers from ArXiv."""
+    
+    search_query = 'cat:cs.CV+AND+abs:video+AND+abs:diffusion'
     url = f'http://export.arxiv.org/api/query?search_query={search_query}&sortBy=submittedDate&sortOrder=descending&max_results={max_results}'
     
     print(f"Querying ArXiv API: {url}")
-    feed = feedparser.parse(url)
-    return feed.entries
+    
+    try:
+        feed = feedparser.parse(url)
+        # Check for 503 Service Unavailable
+        if hasattr(feed, 'status') and feed.status == 503:
+            print("  [!] ArXiv API is currently down (503 Service Unavailable).")
+            return fetch_fallback_papers(max_results)
+            
+        # Check if the query returned zero results
+        if len(feed.entries) == 0:
+            print("  [!] ArXiv returned 0 entries. Passing to fallback.")
+            return fetch_fallback_papers(max_results)
+            
+        return feed.entries
+    except Exception as e:
+        print(f"  [!] Failed to connect to ArXiv: {e}")
+        return fetch_fallback_papers(max_results)
 
 def analyze_paper(title, summary, max_retries=3):
     """Passes the paper details to the LLM with retry logic for 503 errors."""
@@ -35,9 +82,7 @@ def analyze_paper(title, summary, max_retries=3):
     Abstract: {summary}
     """
     
-    # ---------------------------------------------------------
-    # NEW: Exponential Backoff Retry Logic
-    # ---------------------------------------------------------
+    # Exponential Backoff Retry Logic
     for attempt in range(max_retries):
         try:
             response = client.models.generate_content(
@@ -48,11 +93,11 @@ def analyze_paper(title, summary, max_retries=3):
         except Exception as e:
             print(f"  [!] API Call Failed (Attempt {attempt + 1}/{max_retries}): {e}")
             if attempt < max_retries - 1:
-                sleep_time = 15 * (attempt + 1) # Waits 15s, then 30s
+                sleep_time = 15 * (attempt + 1)
                 print(f"  [*] Waiting {sleep_time} seconds before retrying...")
                 time.sleep(sleep_time)
             else:
-                return "> *Analysis failed due to sustained API high demand. Try reading the abstract directly on ArXiv.*"
+                return "> *Analysis failed due to sustained API high demand. Try reading the abstract directly on the source link.*"
 
 def main():
     print("Agent waking up. Fetching papers...")
@@ -71,7 +116,7 @@ def main():
         analysis = analyze_paper(paper.title, paper.summary)
         
         daily_report += f"### {paper.title}\n"
-        daily_report += f"[Read Full Paper on ArXiv]({paper.link})\n\n"
+        daily_report += f"[Read Full Paper]({paper.link})\n\n"
         daily_report += f"{analysis}\n\n"
         daily_report += "---\n"
         
