@@ -8,11 +8,13 @@ from google import genai
 # Configure the LLM
 client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
-def fetch_latest_papers(query='all:"video generation" AND all:"diffusion"', max_results=3):
+def fetch_latest_papers(max_results=3):
     """Fetches the latest research papers from ArXiv."""
     
-    safe_query = urllib.parse.quote(query)
-    url = f'http://export.arxiv.org/api/query?search_query={safe_query}&sortBy=submittedDate&sortOrder=descending&max_results={max_results}'
+    # ArXiv's legacy API requires strict formatting: '+' for spaces, '%22' for quotes.
+    # We manually construct the exact string to prevent boolean logic from breaking.
+    search_query = 'all:%22video+generation%22+AND+all:diffusion'
+    url = f'http://export.arxiv.org/api/query?search_query={search_query}&sortBy=submittedDate&sortOrder=descending&max_results={max_results}'
     
     print(f"Querying ArXiv API: {url}")
     feed = feedparser.parse(url)
