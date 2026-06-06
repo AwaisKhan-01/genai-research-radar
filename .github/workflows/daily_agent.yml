@@ -37,7 +37,7 @@ jobs:
 
       - name: Commit and Push Changes
         run: |
-          git config --local user.email "actions@github.com"
-          git config --local user.name "GitHub Actions Agent"
+          git config --local user.email "114641928+AwaisKhan-01@users.noreply.github.com"
+          git config --local user.name "AwaisKhan-01"
           git add reports/
           git diff --quiet && git diff --staged --quiet || (git commit -m "Automated AI Research Digest" && git push)
